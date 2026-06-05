@@ -275,15 +275,14 @@ export default function VMDetail() {
   const Icon  = TYPE_ICONS[vm.type]  || Terminal;
   const color = TYPE_COLORS[vm.type] || 'var(--text-muted)';
 
-  // commande SSH avec port explicite si disponible (toujours le cas avec les vrais modules)
   const sshUser = vm.sshUser || 'debian';
-  const sshCmd  = vm.ip
-    ? `ssh ${sshUser}@${vm.ip}${vm.sshPort ? ` -p ${vm.sshPort}` : ''}`
-    : 'en attente de l\'IP...';
 
-  // port applicatif affiché selon le type
+  const sshCmd = vm.sshPort
+    ? `ssh ${sshUser}@localhost -p ${vm.sshPort}`
+    : `ssh ${sshUser}@localhost`;
+
   const webPort = vm.httpPort ?? vm.appPort ?? null;
-  const webUrl  = webPort && vm.ip ? `http://${vm.ip}:${webPort}` : null;
+  const webUrl  = webPort ? `http://localhost:${webPort}` : null;
 
   return (
     <div style={{ padding: '2rem', maxWidth: 1100, margin: '0 auto' }}>
