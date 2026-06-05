@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { AppError } from '../middleware/errorHandler.js'
 import { buildTfvarsContent, tfvarsFilename } from '../utils/tfvars.js'
 import { getContainerStats } from '../services/docker.js'
+import { sendCredentials } from '../services/esp32.js'
 import {
   terraformApply,
   terraformDestroy,
@@ -43,6 +44,7 @@ function applyOutputs(vm, outputs) {
   const updated = {
     ...vm,
     status:        'running',
+    errorMessage:  undefined,   // on efface l'éventuelle erreur précédente
     ip:            outputs.vm_ip          ?? vm.ip,
     containerId:   outputs.vm_id          ?? vm.containerId,
     containerName: outputs.vm_name        ?? vm.containerName,
@@ -134,6 +136,10 @@ router.post('/', async (req, res) => {
       }
 
       await updateVM(vm.id, applyOutputs(vm, outputs))
+
+      sendCredentials(vm, outputs).catch((e) =>
+        console.warn('[esp32] envoi échoué :', e.message)
+      )
     } catch (err) {
       console.error(`[terraform] apply échoué pour ${vm.id} :`, err.message)
       await updateVM(vm.id, { status: 'error', errorMessage: err.message })
@@ -146,13 +152,10 @@ router.get('/', async (_req, res) => {
   res.json({ success: true, data: vms })
 })
 
-// GET /api/vms/:id/stats — snapshot CPU/RAM depuis docker stats
-// doit être déclaré AVANT /:id pour ne pas être capturé par ce pattern
 router.get('/:id/stats', async (req, res) => {
   const vm = await findVM(req.params.id)
   if (!vm) throw new AppError(`VM "${req.params.id}" introuvable`, 404)
 
-  // si la VM n'est pas running ou n'a pas de container → zéros
   if (!vm.containerId || vm.status !== 'running') {
     return res.json({ success: true, data: { cpuUsage: 0, ramUsage: 0, diskUsage: 0 } })
   }
@@ -251,6 +254,19 @@ router.delete('/:id', async (req, res) => {
   res.json({ success: true, data: { id: vm.id }, message: 'VM détruite' })
 })
 
+// POST /api/vms/:id/send-to-esp32 — renvoie manuellement les credentials à l'ESP32
+router.post('/:id/send-to-esp32', async (req, res) => {
+  const vm = await findVM(req.params.id)
+  if (!vm) throw new AppError(`VM "${req.params.id}" introuvable`, 404)
+
+  if (!vm.sshPassword) {
+    throw new AppError('pas de credentials disponibles pour cette VM (provisioning incomplet ?)', 400)
+  }
+
+  await sendCredentials(vm, {})
+  res.json({ success: true, message: `credentials envoyés à l'ESP32 pour "${vm.name}"` })
+})
+
 // POST /api/vms/:id/:action — start / stop / reboot
 // pour l'instant ces actions mettent juste à jour le statut dans vms.json
 // dans un vrai projet on déclencherait un docker start/stop via terraform
@@ -297,6 +313,9 @@ router.get('/:id/logs', async (req, res) => {
     try {
       const outputs = await terraformOutput(vm.type)
       await updateVM(vm.id, applyOutputs(vm, outputs))
+      sendCredentials(vm, outputs).catch((e) =>
+        console.warn('[esp32] envoi échoué (logs) :', e.message)
+      )
     } catch { /* non bloquant */ }
 
     send('✓ VM provisionnée avec succès')

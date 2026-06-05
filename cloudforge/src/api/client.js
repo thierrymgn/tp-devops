@@ -107,6 +107,10 @@ const realClient = {
     const res = await http.get(`/vms/${id}/stats`);
     return res.data;
   },
+  async sendToEsp32(id) {
+    const res = await http.post(`/vms/${id}/send-to-esp32`);
+    return res;
+  },
 };
 
 export const api = USE_MOCK ? mockClient : realClient;

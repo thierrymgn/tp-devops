@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Globe, Zap, Layout, Terminal, Play, Square, RotateCcw,
-  Trash2, Copy, Check, ArrowLeft, Activity, Clock, ScrollText,
+  Trash2, Copy, Check, ArrowLeft, Activity, Clock, ScrollText, Cpu,
 } from 'lucide-react';
 import { api } from '../api/client.js';
 import StatusBadge from '../components/ui/StatusBadge.jsx';
@@ -249,6 +249,18 @@ export default function VMDetail() {
     }
   }, [id]);
 
+  const doSendEsp32 = useCallback(async () => {
+    setActionBusy('esp32');
+    try {
+      await api.sendToEsp32(id);
+      alert('✓ Credentials envoyés à l\'ESP32');
+    } catch (e) {
+      alert(`Erreur ESP32 : ${e.message}`);
+    } finally {
+      setActionBusy(null);
+    }
+  }, [id]);
+
   const doDelete = useCallback(async () => {
     setConfirm(null);
     setActionBusy('delete');
@@ -359,6 +371,18 @@ export default function VMDetail() {
 
         {/* Quick actions */}
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          {vm.sshPassword && (
+            <button
+              className="btn-ghost"
+              onClick={doSendEsp32}
+              disabled={!!actionBusy}
+              title="Renvoyer les credentials à l'ESP32"
+              style={{ color: '#a3e635', borderColor: 'rgba(163,230,53,0.3)' }}
+            >
+              <Cpu size={13} />
+              Send ESP32
+            </button>
+          )}
           {vm.status !== 'Running' && (
             <button className="btn-ghost" onClick={() => doAction('start')} disabled={!!actionBusy}>
               <Play size={13} />
@@ -453,12 +477,8 @@ export default function VMDetail() {
               {vm.ip && <CopyButton text={sshCmd} />}
             </div>
             {vm.sshPassword && (
-              <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>Password</span>
-                <code style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-secondary)', background: 'var(--bg-elevated)', padding: '0.15rem 0.5rem', border: '1px solid var(--border)' }}>
-                  {vm.sshPassword}
-                </code>
-                <CopyButton text={vm.sshPassword} />
+              <div style={{ marginTop: '0.5rem', display: 'inline-flex', alignItems: 'center', gap: '0.375rem', padding: '0.2rem 0.6rem', background: 'rgba(163,230,53,0.08)', border: '1px solid rgba(163,230,53,0.25)', fontSize: '0.6875rem', color: '#a3e635' }}>
+                🔒 Credentials sent to ESP32
               </div>
             )}
           </div>
