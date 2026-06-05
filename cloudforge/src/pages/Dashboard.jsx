@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Plus, Globe, Zap, Layout, Terminal, Play, Square, Trash2,
+  Plus, Globe, Zap, Layout, Terminal, Trash2,
   Monitor, Cpu, ChevronRight, RefreshCw,
 } from 'lucide-react';
 import { api } from '../api/client.js';
@@ -36,7 +36,7 @@ function formatRam(mb) {
 export default function Dashboard({ nodes }) {
   const [vms, setVMs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState({});
+  const [deleteLoading, setDeleteLoading] = useState({});
 
   const fetchVMs = useCallback(async () => {
     try {
@@ -51,31 +51,13 @@ export default function Dashboard({ nodes }) {
 
   useEffect(() => { fetchVMs(); }, [fetchVMs]);
 
-  const handleAction = useCallback(async (id, action) => {
-    setActionLoading((p) => ({ ...p, [id]: action }));
-    try {
-      await api.actionVM(id, action);
-      setVMs((prev) =>
-        prev.map((v) => {
-          if (v.id !== id) return v;
-          const status = action === 'start' ? 'Running' : action === 'stop' ? 'Stopped' : v.status;
-          return { ...v, status };
-        })
-      );
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setActionLoading((p) => ({ ...p, [id]: null }));
-    }
-  }, []);
-
   const handleDelete = useCallback(async (id, name) => {
     if (!window.confirm(`Delete VM "${name}"? This action cannot be undone.`)) return;
 
     const originalStatus = vms.find((v) => v.id === id)?.status;
 
     setVMs((prev) => prev.map((v) => v.id === id ? { ...v, status: 'Deleting' } : v));
-    setActionLoading((p) => ({ ...p, [id]: 'delete' }));
+    setDeleteLoading((p) => ({ ...p, [id]: true }));
 
     try {
       await api.deleteVM(id);
@@ -85,7 +67,7 @@ export default function Dashboard({ nodes }) {
       setVMs((prev) => prev.map((v) => v.id === id ? { ...v, status: originalStatus || 'Error' } : v));
       alert(`Erreur lors de la suppression : ${e.message}`);
     } finally {
-      setActionLoading((p) => ({ ...p, [id]: null }));
+      setDeleteLoading((p) => ({ ...p, [id]: null }));
     }
   }, [vms]);
 
@@ -185,7 +167,7 @@ export default function Dashboard({ nodes }) {
                 {vms.map((vm, i) => {
                   const Icon = TYPE_ICONS[vm.type] || Terminal;
                   const color = TYPE_COLORS[vm.type] || 'var(--text-muted)';
-                  const busy = actionLoading[vm.id];
+                  const deleting = deleteLoading[vm.id];
 
                   return (
                     <tr key={vm.id} className="animate-fade-in" style={{ animationDelay: `${i * 0.05}s` }}>
@@ -223,35 +205,13 @@ export default function Dashboard({ nodes }) {
                       </td>
                       <td>
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.375rem' }}>
-                          {vm.status !== 'Running' && (
-                            <button
-                              className="btn-ghost"
-                              onClick={() => handleAction(vm.id, 'start')}
-                              disabled={!!busy}
-                              style={{ padding: '0.3rem 0.625rem' }}
-                              title="Start"
-                            >
-                              <Play size={12} />
-                            </button>
-                          )}
-                          {vm.status === 'Running' && (
-                            <button
-                              className="btn-ghost"
-                              onClick={() => handleAction(vm.id, 'stop')}
-                              disabled={!!busy}
-                              style={{ padding: '0.3rem 0.625rem' }}
-                              title="Stop"
-                            >
-                              <Square size={12} />
-                            </button>
-                          )}
                           <Link to={`/vm/${vm.id}`} className="btn-ghost" style={{ padding: '0.3rem 0.625rem', fontSize: '0.75rem' }}>
                             Detail
                           </Link>
                           <button
                             className="btn-danger"
                             onClick={() => handleDelete(vm.id, vm.name)}
-                            disabled={!!busy}
+                            disabled={!!deleting}
                             style={{ padding: '0.3rem 0.625rem' }}
                             title="Delete"
                           >

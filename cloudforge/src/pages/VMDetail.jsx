@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
-  Globe, Zap, Layout, Terminal, Play, Square, RotateCcw,
-  Trash2, Copy, Check, ArrowLeft, Activity, Clock, ScrollText, Cpu,
+  Globe, Zap, Layout, Terminal,
+  Trash2, Copy, Check, ArrowLeft, Activity, ScrollText, Cpu,
 } from 'lucide-react';
 import { api } from '../api/client.js';
 import StatusBadge from '../components/ui/StatusBadge.jsx';
@@ -29,7 +29,6 @@ const TYPE_LABELS = {
   debian:                'Debian VPS',
 };
 
-const LEVEL_COLORS = { info: 'var(--text-muted)', warn: 'var(--status-provisioning)', error: 'var(--status-stopped)' };
 
 function CopyButton({ text, style }) {
   const [copied, setCopied] = useState(false);
@@ -233,22 +232,6 @@ export default function VMDetail() {
     return () => clearInterval(interval);
   }, [vm?.status, id]);
 
-  const doAction = useCallback(async (action) => {
-    setActionBusy(action);
-    try {
-      await api.actionVM(id, action);
-      setVM((prev) => {
-        if (!prev) return prev;
-        const status = action === 'start' ? 'Running' : action === 'stop' ? 'Stopped' : prev.status;
-        return { ...prev, status };
-      });
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setActionBusy(null);
-    }
-  }, [id]);
-
   const doSendEsp32 = useCallback(async () => {
     setActionBusy('esp32');
     try {
@@ -383,28 +366,6 @@ export default function VMDetail() {
               Send ESP32
             </button>
           )}
-          {vm.status !== 'Running' && (
-            <button className="btn-ghost" onClick={() => doAction('start')} disabled={!!actionBusy}>
-              <Play size={13} />
-              Start
-            </button>
-          )}
-          {vm.status === 'Running' && (
-            <button className="btn-ghost" onClick={() => doAction('stop')} disabled={!!actionBusy}>
-              <Square size={13} />
-              Stop
-            </button>
-          )}
-          <button
-            className="btn-ghost"
-            onClick={() =>
-              setConfirm({ message: `Reboot VM "${vm.name}"?`, onConfirm: () => doAction('reboot') })
-            }
-            disabled={!!actionBusy}
-          >
-            <RotateCcw size={13} />
-            Reboot
-          </button>
           <button
             className="btn-danger"
             onClick={() =>
@@ -511,45 +472,6 @@ export default function VMDetail() {
         </div>
       </div>
 
-      {/* Activity log */}
-      <div className="card animate-fade-in" style={{ padding: '1.5rem', animationDelay: '0.15s' }}>
-        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Clock size={12} />
-          Activity Log
-        </div>
-        <div>
-          {(vm.activity || []).length === 0 ? (
-            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>Aucun événement enregistré.</p>
-          ) : (vm.activity || []).map((entry, i) => (
-            <div
-              key={entry.id}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '1rem',
-                padding: '0.625rem 0',
-                borderBottom: i < vm.activity.length - 1 ? '1px solid var(--border)' : 'none',
-              }}
-            >
-              <span
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: '50%',
-                  background: LEVEL_COLORS[entry.level] || 'var(--text-muted)',
-                  flexShrink: 0,
-                }}
-              />
-              <span style={{ flex: 1, fontSize: '0.875rem', color: 'var(--text-primary)' }}>
-                {entry.event}
-              </span>
-              <span style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                {entry.time}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }

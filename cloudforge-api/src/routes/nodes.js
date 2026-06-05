@@ -39,27 +39,14 @@ router.get('/', async (_req, res) => {
   const cpuUsage = await getCpuUsage()
   const ramUsage = getRamUsage()
 
-  const workerCpu = Math.min(99, cpuUsage + Math.floor(Math.random() * 15))
-  const workerRam = Math.min(99, ramUsage + Math.floor(Math.random() * 20))
-
   const nodes = [
     {
-      id: 'node-master',
-      name: 'master',
-      role: 'master',
-      ip: '192.168.1.10',
+      id:     'node-host',
+      name:   os.hostname(),
+      role:   'host',
       status: 'Online',
-      cpu: cpuUsage,
-      ram: ramUsage,
-    },
-    {
-      id: 'node-worker',
-      name: 'worker',
-      role: 'worker',
-      ip: '192.168.1.11',
-      status: 'Online',
-      cpu: workerCpu,
-      ram: workerRam,
+      cpu:    cpuUsage,
+      ram:    ramUsage,
     },
   ]
 

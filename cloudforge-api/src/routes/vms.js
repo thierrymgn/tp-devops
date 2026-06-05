@@ -267,25 +267,6 @@ router.post('/:id/send-to-esp32', async (req, res) => {
   res.json({ success: true, message: `credentials envoyés à l'ESP32 pour "${vm.name}"` })
 })
 
-// POST /api/vms/:id/:action — start / stop / reboot
-// pour l'instant ces actions mettent juste à jour le statut dans vms.json
-// dans un vrai projet on déclencherait un docker start/stop via terraform
-router.post('/:id/:action', async (req, res) => {
-  const { id, action } = req.params
-
-  if (!['start', 'stop', 'reboot'].includes(action)) {
-    throw new AppError(`action "${action}" inconnue. Actions valides : start, stop, reboot`, 400)
-  }
-
-  const vm = await findVM(id)
-  if (!vm) throw new AppError(`VM "${id}" introuvable`, 404)
-
-  const newStatus = { start: 'running', stop: 'stopped', reboot: 'running' }[action]
-  const updated = await updateVM(id, { status: newStatus })
-
-  res.json({ success: true, data: updated, message: `action "${action}" effectuée` })
-})
-
 router.get('/:id/logs', async (req, res) => {
   const vm = await findVM(req.params.id)
   if (!vm) throw new AppError(`VM "${req.params.id}" introuvable`, 404)
