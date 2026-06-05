@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid'
 
 import { AppError } from '../middleware/errorHandler.js'
 import { buildTfvarsContent, tfvarsFilename } from '../utils/tfvars.js'
+import { getContainerStats } from '../services/docker.js'
 import {
   terraformApply,
   terraformDestroy,
@@ -143,6 +144,21 @@ router.post('/', async (req, res) => {
 router.get('/', async (_req, res) => {
   const vms = await readVMs()
   res.json({ success: true, data: vms })
+})
+
+// GET /api/vms/:id/stats — snapshot CPU/RAM depuis docker stats
+// doit être déclaré AVANT /:id pour ne pas être capturé par ce pattern
+router.get('/:id/stats', async (req, res) => {
+  const vm = await findVM(req.params.id)
+  if (!vm) throw new AppError(`VM "${req.params.id}" introuvable`, 404)
+
+  // si la VM n'est pas running ou n'a pas de container → zéros
+  if (!vm.containerId || vm.status !== 'running') {
+    return res.json({ success: true, data: { cpuUsage: 0, ramUsage: 0, diskUsage: 0 } })
+  }
+
+  const stats = await getContainerStats(vm.containerName || vm.containerId)
+  res.json({ success: true, data: stats })
 })
 
 router.get('/:id', async (req, res) => {

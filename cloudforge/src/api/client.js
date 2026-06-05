@@ -68,6 +68,14 @@ const mockClient = {
   async createVM(payload){ await delay(1000); return { id: `vm-${Date.now()}`, ...payload, status: 'Provisioning' }; },
   async actionVM(id, action) { await delay(500); return { id, action, success: true }; },
   async deleteVM(id)     { await delay(600); return { id, deleted: true }; },
+  async getVMStats()     {
+    await delay(150);
+    return {
+      cpuUsage:  Math.floor(Math.random() * 40) + 5,
+      ramUsage:  Math.floor(Math.random() * 50) + 20,
+      diskUsage: Math.floor(Math.random() * 30) + 10,
+    };
+  },
 };
 
 const realClient = {
@@ -93,6 +101,10 @@ const realClient = {
   },
   async deleteVM(id) {
     const res = await http.del(`/vms/${id}?force=true`);
+    return res.data;
+  },
+  async getVMStats(id) {
+    const res = await http.get(`/vms/${id}/stats`);
     return res.data;
   },
 };

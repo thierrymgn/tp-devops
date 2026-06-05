@@ -200,8 +200,8 @@ export default function VMDetail() {
   const [loading, setLoading] = useState(true);
   const [actionBusy, setActionBusy] = useState(null);
   const [confirm, setConfirm] = useState(null);
+  const [stats, setStats] = useState({ cpuUsage: 0, ramUsage: 0, diskUsage: 0 });
 
-  // on rafraîchit la VM toutes les 5s si elle est en provisioning
   useEffect(() => {
     api.getVM(id)
       .then(setVM)
@@ -216,8 +216,20 @@ export default function VMDetail() {
         const updated = await api.getVM(id);
         setVM(updated);
         if (updated.status !== 'Provisioning') clearInterval(interval);
-      } catch { /* silencieux */ }
+      } catch { /*  */ }
     }, 5000);
+    return () => clearInterval(interval);
+  }, [vm?.status, id]);
+
+  useEffect(() => {
+    if (!vm || vm.status !== 'Running') return;
+
+    api.getVMStats(id).then(setStats).catch(() => {});
+
+    const interval = setInterval(() => {
+      api.getVMStats(id).then(setStats).catch(() => {});
+    }, 5000);
+
     return () => clearInterval(interval);
   }, [vm?.status, id]);
 
@@ -398,20 +410,20 @@ export default function VMDetail() {
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-around', marginBottom: '1.5rem' }}>
             <RingGauge
-              value={vm.cpuUsage ?? 0}
+              value={stats.cpuUsage}
               color="var(--accent-cyan)"
               label="CPU"
               sublabel={`${vm.cpu} vCPU`}
             />
             <RingGauge
-              value={vm.ramUsage ?? 0}
+              value={stats.ramUsage}
               color="#818cf8"
               label="RAM"
               sublabel={vm.ram >= 1024 ? `${vm.ram / 1024}GB` : `${vm.ram}MB`}
             />
           </div>
           <BarGauge
-            value={vm.diskUsage ?? 0}
+            value={stats.diskUsage}
             color="#a3e635"
             label="Disk"
             sublabel={`${vm.disk}GB provisioned`}

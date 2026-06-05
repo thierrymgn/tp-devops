@@ -112,7 +112,10 @@ resource "docker_container" "ssh" {
     container_path = "/config/wordpress"
   }
 
-  ports = [{ internal = 2222, external = var.ssh_port }]
+  ports {
+    internal = 2222
+    external = var.ssh_port
+  }
 
   env = [
     "PUID=1000",
