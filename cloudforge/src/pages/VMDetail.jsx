@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Globe, Zap, Layout, Terminal, Play, Square, RotateCcw,
-  Trash2, Copy, Check, ArrowLeft, Activity, Clock,
+  Trash2, Copy, Check, ArrowLeft, Activity, Clock, ScrollText,
 } from 'lucide-react';
 import { api } from '../api/client.js';
 import StatusBadge from '../components/ui/StatusBadge.jsx';
@@ -92,6 +92,107 @@ function ConfirmModal({ message, onConfirm, onCancel }) {
   );
 }
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+
+// Panel de logs SSE — s'ouvre automatiquement si la VM est en Provisioning
+function LogsPanel({ vmId, autoOpen }) {
+  const [open, setOpen]       = useState(autoOpen);
+  const [lines, setLines]     = useState([]);
+  const [running, setRunning] = useState(false);
+  const [done, setDone]       = useState(false);
+  const bottomRef             = useRef(null);
+  const esRef                 = useRef(null);
+
+  // scroll automatique vers le bas à chaque nouvelle ligne
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [lines]);
+
+  // ferme le stream SSE quand le composant est démonté
+  useEffect(() => () => esRef.current?.close(), []);
+
+  const startStream = useCallback(() => {
+    if (running) return;
+    setLines([]);
+    setDone(false);
+    setRunning(true);
+
+    const es = new EventSource(`${API_BASE}/vms/${vmId}/logs`);
+    esRef.current = es;
+
+    es.onmessage = (e) => {
+      const { line } = JSON.parse(e.data);
+      setLines((prev) => [...prev, line]);
+    };
+
+    const finish = () => {
+      es.close();
+      setRunning(false);
+      setDone(true);
+    };
+
+    es.addEventListener('done', finish);
+    es.onerror = finish;
+  }, [vmId, running]);
+
+  // démarre automatiquement si la VM est en provisioning
+  useEffect(() => {
+    if (autoOpen) startStream();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (!open) {
+    return (
+      <button
+        className="btn-ghost"
+        onClick={() => { setOpen(true); startStream(); }}
+        style={{ fontSize: '0.8125rem' }}
+      >
+        <ScrollText size={13} />
+        View Logs
+      </button>
+    );
+  }
+
+  return (
+    <div className="card animate-fade-in" style={{ padding: '1.5rem', marginTop: '1rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <ScrollText size={12} />
+          Terraform Logs
+          {running && (
+            <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: 'var(--status-running)', boxShadow: '0 0 6px var(--status-running)' }} className="status-pulse" />
+          )}
+          {done && <span style={{ color: 'var(--status-running)', fontSize: '0.6875rem' }}>— terminé</span>}
+        </div>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          {!running && (
+            <button className="btn-ghost" onClick={startStream} style={{ padding: '0.25rem 0.625rem', fontSize: '0.75rem' }}>
+              ↺ Relancer
+            </button>
+          )}
+          <button className="btn-ghost" onClick={() => setOpen(false)} style={{ padding: '0.25rem 0.625rem', fontSize: '0.75rem' }}>
+            ✕
+          </button>
+        </div>
+      </div>
+
+      <div style={{ background: '#050810', border: '1px solid var(--border)', padding: '1rem', fontFamily: 'var(--font-mono)', fontSize: '0.8rem', minHeight: 180, maxHeight: 320, overflowY: 'auto' }}>
+        {lines.length === 0 && running && (
+          <span style={{ color: 'var(--text-muted)' }}>Connexion au stream terraform…</span>
+        )}
+        {lines.map((line, i) => (
+          <div key={i} style={{ marginBottom: '0.2rem', color: line.includes('✓') || line.includes('complete') ? 'var(--status-running)' : line.includes('✗') || line.includes('Error') ? 'var(--status-stopped)' : 'var(--text-secondary)', display: 'flex', gap: '0.5rem' }}>
+            <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>›</span>
+            {line}
+          </div>
+        ))}
+        <div ref={bottomRef} />
+      </div>
+    </div>
+  );
+}
+
 export default function VMDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -100,12 +201,25 @@ export default function VMDetail() {
   const [actionBusy, setActionBusy] = useState(null);
   const [confirm, setConfirm] = useState(null);
 
+  // on rafraîchit la VM toutes les 5s si elle est en provisioning
   useEffect(() => {
     api.getVM(id)
       .then(setVM)
       .catch(() => navigate('/dashboard'))
       .finally(() => setLoading(false));
   }, [id, navigate]);
+
+  useEffect(() => {
+    if (!vm || vm.status !== 'Provisioning') return;
+    const interval = setInterval(async () => {
+      try {
+        const updated = await api.getVM(id);
+        setVM(updated);
+        if (updated.status !== 'Provisioning') clearInterval(interval);
+      } catch { /* silencieux */ }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [vm?.status, id]);
 
   const doAction = useCallback(async (action) => {
     setActionBusy(action);
@@ -132,6 +246,7 @@ export default function VMDetail() {
     } catch (e) {
       console.error(e);
       setActionBusy(null);
+      alert(`Erreur lors de la suppression : ${e.message}`);
     }
   }, [id, navigate]);
 
@@ -271,7 +386,10 @@ export default function VMDetail() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+      {/* Panel logs — automatique si provisioning, bouton sinon */}
+      <LogsPanel vmId={vm.id} autoOpen={vm.status === 'Provisioning'} />
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem', marginTop: '1rem' }}>
         {/* Resource gauges */}
         <div className="card animate-fade-in" style={{ padding: '1.5rem', animationDelay: '0.05s' }}>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

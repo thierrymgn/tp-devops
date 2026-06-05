@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Globe, Zap, Layout, Terminal, Check, ChevronRight, ChevronLeft, Server } from 'lucide-react';
-import { api } from '../api/client.js';
+import { api, USE_MOCK } from '../api/client.js';
 import { vmTemplates } from '../data/mock.js';
 
 const ICON_MAP = { Globe, Zap, Layout, Terminal };
@@ -391,21 +391,48 @@ export default function CreateVM() {
     setDeploying(true);
     setLogLines([]);
 
-    for (let i = 0; i < LOG_LINES.length; i++) {
-      await new Promise((r) => setTimeout(r, 320 + Math.random() * 200));
-      setLogLines((prev) => [...prev, LOG_LINES[i]]);
+    if (USE_MOCK) {
+      for (let i = 0; i < LOG_LINES.length; i++) {
+        await new Promise((r) => setTimeout(r, 320 + Math.random() * 200));
+        setLogLines((prev) => [...prev, LOG_LINES[i]]);
+      }
+      setDeploying(false);
+      setDeployed(true);
+      setTimeout(() => navigate('/dashboard'), 3000);
+      return;
     }
 
     try {
-      await api.createVM({ ...config, type: template.id, typeLabel: template.name });
-    } catch (e) {
-      console.error(e);
+      const vm = await api.createVM({
+        name: config.name,
+        type: template.id,
+        ram:  config.ram,
+        cpu:  config.cpu,
+        disk: config.disk,
+      });
+
+      const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+      const es = new EventSource(`${apiBase}/vms/${vm.id}/logs`);
+
+      es.onmessage = (e) => {
+        const { line } = JSON.parse(e.data);
+        setLogLines((prev) => [...prev, line]);
+      };
+
+      const finish = () => {
+        es.close();
+        setDeploying(false);
+        setDeployed(true);
+        setTimeout(() => navigate('/dashboard'), 3000);
+      };
+
+      es.addEventListener('done', finish);
+      es.onerror = finish;
+    } catch (err) {
+      console.error('erreur lors du déploiement :', err);
+      setLogLines((prev) => [...prev, `✗ Erreur : ${err.message}`]);
+      setDeploying(false);
     }
-
-    setDeploying(false);
-    setDeployed(true);
-
-    setTimeout(() => navigate('/dashboard'), 3000);
   };
 
   const stepLabels = ['Template', 'Resources', 'Deploy'];
@@ -415,7 +442,7 @@ export default function CreateVM() {
       <div style={{ marginBottom: '2rem' }} className="animate-fade-in">
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.25rem' }}>New Virtual Machine</h1>
         <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-          Provision a VM on your K3s cluster via Terraform.
+          Provision a VM via Terraform + Docker.
         </p>
       </div>
 

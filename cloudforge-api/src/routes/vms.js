@@ -196,28 +196,62 @@ router.delete('/:id', async (req, res) => {
   const vm = await findVM(req.params.id)
   if (!vm) throw new AppError(`VM "${req.params.id}" introuvable`, 404)
 
-  if (vm.status === 'provisioning') {
-    throw new AppError('impossible de détruire une VM en cours de provisionnement', 409)
+  const force = req.query.force === 'true'
+
+  if (vm.status === 'provisioning' && !force) {
+    throw new AppError(
+      'VM en cours de provisionnement — ajoutez ?force=true pour forcer la suppression',
+      409
+    )
+  }
+
+  if (!vm.containerId) {
+    await removeVM(vm.id)
+    await cleanupTfvars(vm.tfvarsPath)
+    return res.json({ success: true, data: { id: vm.id }, message: 'VM supprimée' })
   }
 
   await updateVM(vm.id, { status: 'provisioning' })
 
-  res.json({
-    success: true,
-    data: { id: vm.id },
-    message: 'destruction en cours...',
-  })
+  try {
+    await terraformDestroy({ type: vm.type, tfvarsPath: vm.tfvarsPath })
+  } catch (err) {
+    console.error(`[terraform] destroy échoué pour ${vm.id} :`, err.message)
 
-  ;(async () => {
-    try {
-      await terraformDestroy({ type: vm.type, tfvarsPath: vm.tfvarsPath })
-      await removeVM(vm.id)
-      await cleanupTfvars(vm.tfvarsPath)
-    } catch (err) {
-      console.error(`[terraform] destroy échoué pour ${vm.id} :`, err.message)
+    if (!force) {
       await updateVM(vm.id, { status: 'error', errorMessage: err.message })
+      throw new AppError(
+        `terraform destroy a échoué — relancez avec ?force=true pour supprimer quand même`,
+        500,
+        err.message
+      )
     }
-  })()
+
+    console.warn(`[terraform] force=true → suppression de l'index malgré l'échec du destroy`)
+  }
+
+  await removeVM(vm.id)
+  await cleanupTfvars(vm.tfvarsPath)
+  res.json({ success: true, data: { id: vm.id }, message: 'VM détruite' })
+})
+
+// POST /api/vms/:id/:action — start / stop / reboot
+// pour l'instant ces actions mettent juste à jour le statut dans vms.json
+// dans un vrai projet on déclencherait un docker start/stop via terraform
+router.post('/:id/:action', async (req, res) => {
+  const { id, action } = req.params
+
+  if (!['start', 'stop', 'reboot'].includes(action)) {
+    throw new AppError(`action "${action}" inconnue. Actions valides : start, stop, reboot`, 400)
+  }
+
+  const vm = await findVM(id)
+  if (!vm) throw new AppError(`VM "${id}" introuvable`, 404)
+
+  const newStatus = { start: 'running', stop: 'stopped', reboot: 'running' }[action]
+  const updated = await updateVM(id, { status: newStatus })
+
+  res.json({ success: true, data: updated, message: `action "${action}" effectuée` })
 })
 
 router.get('/:id/logs', async (req, res) => {

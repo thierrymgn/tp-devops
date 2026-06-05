@@ -1,10 +1,12 @@
 export default function StatusBadge({ status, size = 'sm' }) {
   const map = {
-    Running: { dot: '#22c55e', label: 'Running', pulse: true },
-    Stopped: { dot: '#ef4444', label: 'Stopped', pulse: false },
+    Running:      { dot: '#22c55e', label: 'Running',      pulse: true  },
+    Stopped:      { dot: '#ef4444', label: 'Stopped',      pulse: false },
     Provisioning: { dot: '#f59e0b', label: 'Provisioning', pulse: false },
-    Online: { dot: '#22c55e', label: 'Online', pulse: true },
-    Offline: { dot: '#ef4444', label: 'Offline', pulse: false },
+    Deleting:     { dot: '#ef4444', label: 'Deleting…',    pulse: false },
+    Error:        { dot: '#ef4444', label: 'Error',        pulse: false },
+    Online:       { dot: '#22c55e', label: 'Online',       pulse: true  },
+    Offline:      { dot: '#ef4444', label: 'Offline',      pulse: false },
   };
 
   const cfg = map[status] || { dot: '#4a5a78', label: status, pulse: false };

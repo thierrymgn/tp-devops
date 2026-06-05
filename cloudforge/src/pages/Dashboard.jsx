@@ -71,16 +71,23 @@ export default function Dashboard({ nodes }) {
 
   const handleDelete = useCallback(async (id, name) => {
     if (!window.confirm(`Delete VM "${name}"? This action cannot be undone.`)) return;
+
+    const originalStatus = vms.find((v) => v.id === id)?.status;
+
+    setVMs((prev) => prev.map((v) => v.id === id ? { ...v, status: 'Deleting' } : v));
     setActionLoading((p) => ({ ...p, [id]: 'delete' }));
+
     try {
       await api.deleteVM(id);
       setVMs((prev) => prev.filter((v) => v.id !== id));
     } catch (e) {
       console.error(e);
+      setVMs((prev) => prev.map((v) => v.id === id ? { ...v, status: originalStatus || 'Error' } : v));
+      alert(`Erreur lors de la suppression : ${e.message}`);
     } finally {
       setActionLoading((p) => ({ ...p, [id]: null }));
     }
-  }, []);
+  }, [vms]);
 
   const running = vms.filter((v) => v.status === 'Running').length;
   const stopped = vms.filter((v) => v.status === 'Stopped').length;

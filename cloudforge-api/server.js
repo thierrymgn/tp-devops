@@ -43,7 +43,7 @@ async function start() {
     await initStateFiles()
     console.log('[state] fichiers de données initialisés')
 
-    app.listen(PORT, () => {
+    app.listen(PORT, '0.0.0.0', () => {
       console.log(`\n  ☁  CloudForge API`)
       console.log(`  ➜  http://localhost:${PORT}`)
       console.log(`  ➜  Health : http://localhost:${PORT}/health`)
