@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { EventEmitter } from 'events'
 import path from 'path'
 import fs from 'fs/promises'
 import { v4 as uuidv4 } from 'uuid'
@@ -25,6 +26,11 @@ import {
 } from '../services/state.js'
 
 const router = Router()
+
+// Active terraform runs initiated by PATCH (reconfiguration).
+// vmId → { emitter: EventEmitter, lines: string[], done: boolean }
+// The /logs SSE endpoint attaches to this instead of spawning a second terraform process.
+const activeRuns = new Map()
 
 const TFVARS_DIR = path.resolve(process.env.TFVARS_PATH || './terraform/envs')
 
@@ -197,16 +203,38 @@ router.patch('/:id', async (req, res) => {
   })
 
   ;(async () => {
+    const run = { emitter: new EventEmitter(), lines: [], done: false }
+    activeRuns.set(vm.id, run)
+
+    const pushLine = (line) => {
+      run.lines.push(line)
+      run.emitter.emit('line', line)
+    }
+
     try {
-      await terraformRefresh({ type: vm.type, tfvarsPath })
+      try {
+        await terraformRefresh({ type: vm.type, tfvarsPath, onLine: pushLine })
+      } catch (firstErr) {
+        // Docker sometimes rejects an in-place container update on the first attempt
+        // (e.g. container recreation timing on Docker Desktop). Retry once after a short delay.
+        pushLine(`⚠ première tentative échouée, retry dans 4s…`)
+        await new Promise(r => setTimeout(r, 4000))
+        await terraformRefresh({ type: vm.type, tfvarsPath, onLine: pushLine })
+      }
 
       let outputs = {}
       try { outputs = await terraformOutput(vm.type) } catch { /* non bloquant */ }
 
       await updateVM(vm.id, applyOutputs({ ...vm, ...newConfig }, outputs))
+      pushLine('✓ configuration mise à jour avec succès')
     } catch (err) {
       console.error(`[terraform] refresh échoué pour ${vm.id} :`, err.message)
       await updateVM(vm.id, { status: 'error', errorMessage: err.message })
+      pushLine(`✗ erreur : ${err.message}`)
+    } finally {
+      run.done = true
+      run.emitter.emit('done')
+      activeRuns.delete(vm.id)
     }
   })()
 })
@@ -282,6 +310,34 @@ router.get('/:id/logs', async (req, res) => {
     res.write(`data: ${payload}\n\n`)
   }
 
+  // If a PATCH reconfiguration is already running, attach to its output stream
+  // instead of spawning a second conflicting terraform process.
+  const activeRun = activeRuns.get(vm.id)
+  if (activeRun) {
+    activeRun.lines.forEach((line) => send(line))
+
+    if (activeRun.done) {
+      res.write('event: done\ndata: {}\n\n')
+      return res.end()
+    }
+
+    const onLine = (line) => send(line)
+    const onDone = () => {
+      res.write('event: done\ndata: {}\n\n')
+      res.end()
+    }
+
+    activeRun.emitter.on('line', onLine)
+    activeRun.emitter.once('done', onDone)
+    req.on('close', () => {
+      activeRun.emitter.off('line', onLine)
+      activeRun.emitter.off('done', onDone)
+    })
+
+    return
+  }
+
+  // No active run — creation flow: spawn terraform with live SSE output.
   send(`démarrage de terraform apply pour la VM "${vm.name}" (${vm.type})…`)
 
   try {

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Globe, Zap, Layout, Terminal,
-  Trash2, Copy, Check, ArrowLeft, Activity, ScrollText, Cpu,
+  Trash2, Copy, Check, ArrowLeft, Activity, ScrollText, Settings2, Cpu,
 } from 'lucide-react';
 import { api } from '../api/client.js';
 import StatusBadge from '../components/ui/StatusBadge.jsx';
@@ -92,6 +92,65 @@ function ConfirmModal({ message, onConfirm, onCancel }) {
 }
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+
+function EditModal({ config, onChange, onApply, onCancel }) {
+  const ramLabel = config.ram >= 1024 ? `${config.ram / 1024} GB` : `${config.ram} MB`;
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(10, 14, 26, 0.85)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 200,
+        backdropFilter: 'blur(4px)',
+      }}
+    >
+      <div
+        className="card animate-fade-in"
+        style={{ padding: '2rem', maxWidth: 440, width: '90%', border: '1px solid var(--border-bright)' }}
+      >
+        <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <Settings2 size={16} />
+          Edit Configuration
+        </div>
+
+        {[
+          { key: 'ram',  label: 'RAM',  display: ramLabel,          min: 512,  max: 8192, step: 512 },
+          { key: 'cpu',  label: 'vCPU', display: `${config.cpu} cores`, min: 1, max: 8,  step: 1 },
+          { key: 'disk', label: 'Disk', display: `${config.disk} GB`,   min: 5, max: 100, step: 5 },
+        ].map(({ key, label, display, min, max, step }) => (
+          <div key={key} style={{ marginBottom: '1.25rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</span>
+              <span style={{ fontSize: '0.8125rem', fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--text-primary)' }}>{display}</span>
+            </div>
+            <input
+              type="range"
+              min={min}
+              max={max}
+              step={step}
+              value={config[key]}
+              onChange={(e) => onChange(key, Number(e.target.value))}
+              style={{ width: '100%', accentColor: 'var(--accent-cyan)' }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+              <span>{key === 'ram' ? (min >= 1024 ? `${min / 1024}GB` : `${min}MB`) : key === 'disk' ? `${min}GB` : min}</span>
+              <span>{key === 'ram' ? `${max / 1024}GB` : key === 'disk' ? `${max}GB` : max}</span>
+            </div>
+          </div>
+        ))}
+
+        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+          <button className="btn-ghost" onClick={onCancel}>Cancel</button>
+          <button className="btn-primary" onClick={onApply}>Apply</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // Panel de logs SSE — s'ouvre automatiquement si la VM est en Provisioning
 function LogsPanel({ vmId, autoOpen }) {
@@ -200,6 +259,9 @@ export default function VMDetail() {
   const [actionBusy, setActionBusy] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const [stats, setStats] = useState({ cpuUsage: 0, ramUsage: 0, diskUsage: 0 });
+  const [editOpen, setEditOpen] = useState(false);
+  const [editConfig, setEditConfig] = useState(null);
+  const [reconfigKey, setReconfigKey] = useState(0);
 
   useEffect(() => {
     api.getVM(id)
@@ -244,6 +306,20 @@ export default function VMDetail() {
     }
   }, [id]);
 
+  const doReconfigure = useCallback(async () => {
+    setEditOpen(false);
+    setActionBusy('reconfigure');
+    try {
+      const updated = await api.updateVM(id, editConfig);
+      setVM(updated);
+      setReconfigKey((k) => k + 1);
+    } catch (e) {
+      alert(`Erreur : ${e.message}`);
+    } finally {
+      setActionBusy(null);
+    }
+  }, [id, editConfig]);
+
   const doDelete = useCallback(async () => {
     setConfirm(null);
     setActionBusy('delete');
@@ -286,6 +362,15 @@ export default function VMDetail() {
           message={confirm.message}
           onConfirm={confirm.onConfirm}
           onCancel={() => setConfirm(null)}
+        />
+      )}
+
+      {editOpen && editConfig && (
+        <EditModal
+          config={editConfig}
+          onChange={(key, val) => setEditConfig((prev) => ({ ...prev, [key]: val }))}
+          onApply={doReconfigure}
+          onCancel={() => setEditOpen(false)}
         />
       )}
 
@@ -383,7 +468,7 @@ export default function VMDetail() {
       </div>
 
       {/* Panel logs — automatique si provisioning, bouton sinon */}
-      <LogsPanel vmId={vm.id} autoOpen={vm.status === 'Provisioning'} />
+      <LogsPanel key={reconfigKey} vmId={vm.id} autoOpen={vm.status === 'Provisioning'} />
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem', marginTop: '1rem' }}>
         {/* Resource gauges */}
@@ -446,8 +531,19 @@ export default function VMDetail() {
 
           {/* Specs */}
           <div className="card animate-fade-in" style={{ padding: '1.25rem', animationDelay: '0.12s' }}>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.875rem' }}>
-              Specifications
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.875rem' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                Specifications
+              </div>
+              <button
+                className="btn-ghost"
+                style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+                disabled={!!actionBusy || vm.status === 'Provisioning'}
+                onClick={() => { setEditConfig({ ram: vm.ram, cpu: vm.cpu, disk: vm.disk }); setEditOpen(true); }}
+              >
+                <Settings2 size={12} />
+                Edit
+              </button>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.875rem' }}>
               {[

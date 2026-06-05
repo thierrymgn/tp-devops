@@ -20,9 +20,10 @@ resource "docker_container" "app" {
   name  = var.vm_name
   image = docker_image.app.image_id
 
-  # RAM hard limit; CPU shares are relative (1024 = 1 core equivalent)
-  memory     = var.ram
-  cpu_shares = var.cpu * 1024
+  # RAM hard limit; swap set to -1 (unlimited) so memory can be increased freely
+  memory       = var.ram
+  memory_swap  = -1
+  cpu_shares   = var.cpu * 1024
 
   must_run = true
   restart  = "unless-stopped"

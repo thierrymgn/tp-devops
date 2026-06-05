@@ -66,7 +66,9 @@ const mockClient = {
   async getVM(id)        { await delay(200); const vm = mockVMs.find((v) => v.id === id); if (!vm) throw new Error(`VM ${id} introuvable`); return { ...vm }; },
   async getNodes()       { await delay(200); return [...mockNodes]; },
   async createVM(payload){ await delay(1000); return { id: `vm-${Date.now()}`, ...payload, status: 'Provisioning' }; },
+  async actionVM(id, action) { await delay(500); return { id, action, success: true }; },
   async deleteVM(id)     { await delay(600); return { id, deleted: true }; },
+  async updateVM(id, config) { await delay(500); return { id, ...config, status: 'Provisioning' }; },
   async getVMStats()     {
     await delay(150);
     return {
@@ -94,6 +96,10 @@ const realClient = {
     const res = await http.post('/vms', payload);
     return normalizeVM(res.data);
   },
+  async actionVM(id, action) {
+    const res = await http.post(`/vms/${id}/${action}`);
+    return res.data;
+  },
   async deleteVM(id) {
     const res = await http.del(`/vms/${id}?force=true`);
     return res.data;
@@ -105,6 +111,10 @@ const realClient = {
   async sendToEsp32(id) {
     const res = await http.post(`/vms/${id}/send-to-esp32`);
     return res;
+  },
+  async updateVM(id, config) {
+    const res = await http.patch(`/vms/${id}`, config);
+    return normalizeVM(res.data);
   },
 };
 
