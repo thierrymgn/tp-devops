@@ -1,0 +1,10 @@
+# Generated .tfvars — one per provisioned VM, created at runtime
+envs/*.tfvars
+
+# Terraform working directories (created by terraform init)
+.terraform/
+.terraform.lock.hcl
+
+# State files — managed by Terraform, not git
+*.tfstate
+*.tfstate.backup

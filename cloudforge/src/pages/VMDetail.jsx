@@ -8,8 +8,26 @@ import { api } from '../api/client.js';
 import StatusBadge from '../components/ui/StatusBadge.jsx';
 import { RingGauge, BarGauge } from '../components/ui/ResourceGauge.jsx';
 
-const TYPE_ICONS = { 'wordpress-multisite': Globe, nodejs: Zap, wordpress: Layout, 'debian-vps': Terminal };
-const TYPE_COLORS = { 'wordpress-multisite': '#00d4ff', nodejs: '#a3e635', wordpress: '#818cf8', 'debian-vps': '#f59e0b' };
+const TYPE_ICONS = {
+  'wordpress-multisite': Globe,
+  node:                  Zap,
+  wordpress:             Layout,
+  debian:                Terminal,
+};
+
+const TYPE_COLORS = {
+  'wordpress-multisite': '#00d4ff',
+  node:                  '#a3e635',
+  wordpress:             '#818cf8',
+  debian:                '#f59e0b',
+};
+
+const TYPE_LABELS = {
+  'wordpress-multisite': 'WordPress Multisite',
+  node:                  'Node.js Server',
+  wordpress:             'WordPress',
+  debian:                'Debian VPS',
+};
 
 const LEVEL_COLORS = { info: 'var(--text-muted)', warn: 'var(--status-provisioning)', error: 'var(--status-stopped)' };
 
@@ -127,9 +145,18 @@ export default function VMDetail() {
 
   if (!vm) return null;
 
-  const Icon = TYPE_ICONS[vm.type] || Terminal;
+  const Icon  = TYPE_ICONS[vm.type]  || Terminal;
   const color = TYPE_COLORS[vm.type] || 'var(--text-muted)';
-  const sshCmd = `ssh debian@${vm.ip}`;
+
+  // commande SSH avec port explicite si disponible (toujours le cas avec les vrais modules)
+  const sshUser = vm.sshUser || 'debian';
+  const sshCmd  = vm.ip
+    ? `ssh ${sshUser}@${vm.ip}${vm.sshPort ? ` -p ${vm.sshPort}` : ''}`
+    : 'en attente de l\'IP...';
+
+  // port applicatif affiché selon le type
+  const webPort = vm.httpPort ?? vm.appPort ?? null;
+  const webUrl  = webPort && vm.ip ? `http://${vm.ip}:${webPort}` : null;
 
   return (
     <div style={{ padding: '2rem', maxWidth: 1100, margin: '0 auto' }}>
@@ -177,15 +204,30 @@ export default function VMDetail() {
             </h1>
             <StatusBadge status={vm.status} size="lg" />
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
-            <span>{vm.typeLabel}</span>
-            <span style={{ color: 'var(--border-bright)' }}>·</span>
-            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-cyan)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-              {vm.ip}
-              <CopyButton text={vm.ip} />
-            </span>
-            <span style={{ color: 'var(--border-bright)' }}>·</span>
-            <span style={{ color: 'var(--text-muted)' }}>Node: {vm.node}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', fontSize: '0.8125rem', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
+            <span>{TYPE_LABELS[vm.type] || vm.typeLabel || vm.type}</span>
+            {vm.ip && (
+              <>
+                <span style={{ color: 'var(--border-bright)' }}>·</span>
+                <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-cyan)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                  {vm.ip}
+                  <CopyButton text={vm.ip} />
+                </span>
+              </>
+            )}
+            {webUrl && (
+              <>
+                <span style={{ color: 'var(--border-bright)' }}>·</span>
+                <a
+                  href={webUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-lime)', fontSize: '0.75rem' }}
+                >
+                  :{webPort} ↗
+                </a>
+              </>
+            )}
           </div>
         </div>
 
@@ -238,20 +280,20 @@ export default function VMDetail() {
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-around', marginBottom: '1.5rem' }}>
             <RingGauge
-              value={vm.cpuUsage}
+              value={vm.cpuUsage ?? 0}
               color="var(--accent-cyan)"
               label="CPU"
               sublabel={`${vm.cpu} vCPU`}
             />
             <RingGauge
-              value={vm.ramUsage}
+              value={vm.ramUsage ?? 0}
               color="#818cf8"
               label="RAM"
               sublabel={vm.ram >= 1024 ? `${vm.ram / 1024}GB` : `${vm.ram}MB`}
             />
           </div>
           <BarGauge
-            value={vm.diskUsage}
+            value={vm.diskUsage ?? 0}
             color="#a3e635"
             label="Disk"
             sublabel={`${vm.disk}GB provisioned`}
@@ -279,8 +321,17 @@ export default function VMDetail() {
               <code style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem', color: '#a3e635', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {sshCmd}
               </code>
-              <CopyButton text={sshCmd} />
+              {vm.ip && <CopyButton text={sshCmd} />}
             </div>
+            {vm.sshPassword && (
+              <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>Password</span>
+                <code style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-secondary)', background: 'var(--bg-elevated)', padding: '0.15rem 0.5rem', border: '1px solid var(--border)' }}>
+                  {vm.sshPassword}
+                </code>
+                <CopyButton text={vm.sshPassword} />
+              </div>
+            )}
           </div>
 
           {/* Specs */}
@@ -290,10 +341,12 @@ export default function VMDetail() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.875rem' }}>
               {[
-                { label: 'vCPU', value: `${vm.cpu} cores` },
-                { label: 'RAM', value: vm.ram >= 1024 ? `${vm.ram / 1024} GB` : `${vm.ram} MB` },
-                { label: 'Disk', value: `${vm.disk} GB` },
-                { label: 'Node', value: vm.node },
+                { label: 'vCPU',     value: `${vm.cpu} cores` },
+                { label: 'RAM',      value: vm.ram >= 1024 ? `${vm.ram / 1024} GB` : `${vm.ram} MB` },
+                { label: 'Disk',     value: `${vm.disk} GB` },
+                { label: 'SSH Port', value: vm.sshPort ? String(vm.sshPort) : '—' },
+                ...(webPort ? [{ label: vm.httpPort ? 'HTTP Port' : 'App Port', value: String(webPort) }] : []),
+                ...(vm.wpAdminUser ? [{ label: 'WP Admin', value: vm.wpAdminUser }] : []),
               ].map(({ label, value }) => (
                 <div key={label}>
                   <div style={{ fontSize: '0.625rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.25rem' }}>
@@ -316,7 +369,9 @@ export default function VMDetail() {
           Activity Log
         </div>
         <div>
-          {(vm.activity || []).map((entry, i) => (
+          {(vm.activity || []).length === 0 ? (
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>Aucun événement enregistré.</p>
+          ) : (vm.activity || []).map((entry, i) => (
             <div
               key={entry.id}
               style={{

@@ -10,16 +10,23 @@ import NodeCard from '../components/ui/NodeCard.jsx';
 
 const TYPE_ICONS = {
   'wordpress-multisite': Globe,
-  nodejs: Zap,
-  wordpress: Layout,
-  'debian-vps': Terminal,
+  node:                  Zap,
+  wordpress:             Layout,
+  debian:                Terminal,
 };
 
 const TYPE_COLORS = {
   'wordpress-multisite': '#00d4ff',
-  nodejs: '#a3e635',
-  wordpress: '#818cf8',
-  'debian-vps': '#f59e0b',
+  node:                  '#a3e635',
+  wordpress:             '#818cf8',
+  debian:                '#f59e0b',
+};
+
+const TYPE_LABELS = {
+  'wordpress-multisite': 'WordPress Multisite',
+  node:                  'Node.js Server',
+  wordpress:             'WordPress',
+  debian:                'Debian VPS',
 };
 
 function formatRam(mb) {
@@ -87,7 +94,7 @@ export default function Dashboard({ nodes }) {
             Infrastructure
           </h1>
           <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-            K3s cluster — 2 nodes &nbsp;·&nbsp;
+            Docker cluster — 2 machines &nbsp;·&nbsp;
             <span style={{ color: 'var(--status-running)' }}>{running} running</span>
             {stopped > 0 && <>, <span style={{ color: 'var(--status-stopped)' }}>{stopped} stopped</span></>}
           </p>
@@ -187,7 +194,7 @@ export default function Dashboard({ nodes }) {
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                           <Icon size={13} color={color} />
-                          <span style={{ color: 'var(--text-secondary)', fontSize: '0.8125rem' }}>{vm.typeLabel}</span>
+                          <span style={{ color: 'var(--text-secondary)', fontSize: '0.8125rem' }}>{TYPE_LABELS[vm.type] || vm.typeLabel || vm.type}</span>
                         </div>
                       </td>
                       <td>

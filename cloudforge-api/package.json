@@ -1,0 +1,28 @@
+{
+  "name": "cloudforge-api",
+  "version": "1.0.0",
+  "description": "CloudForge orchestration API — Express backend for Terraform-driven VM provisioning",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "lint": "node --check src/**/*.js"
+  },
+  "keywords": ["terraform", "k3s", "devops", "express"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "morgan": "^1.11.0",
+    "uuid": "^14.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
